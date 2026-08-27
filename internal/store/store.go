@@ -138,19 +138,19 @@ func (s *Store) UpdateDetailed(ctx context.Context, id string, expected int64, i
 	if idempotencyKey == "" {
 		return domain.Snapshot{}, domain.Invalid("idempotencyKey", "幂等键不能为空")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(context.WithoutCancel(ctx), nil)
 	if err != nil {
 		return domain.Snapshot{}, err
 	}
 	defer tx.Rollback()
-	if cached, ok, err := loadIdempotent(ctx, tx, id, idempotencyKey, action); err != nil {
+	if cached, ok, err := loadIdempotent(context.WithoutCancel(ctx), tx, id, idempotencyKey, action); err != nil {
 		return domain.Snapshot{}, err
 	} else if ok {
 		return cached, nil
 	}
 	var raw []byte
 	var current int64
-	err = tx.QueryRowContext(ctx, `SELECT revision,snapshot_json FROM productions WHERE id=?`, id).Scan(&current, &raw)
+	err = tx.QueryRowContext(context.WithoutCancel(ctx), `SELECT revision,snapshot_json FROM productions WHERE id=?`, id).Scan(&current, &raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Snapshot{}, domain.NotFound("production", id)
 	}
@@ -173,7 +173,7 @@ func (s *Store) UpdateDetailed(ctx context.Context, id string, expected int64, i
 	if err != nil {
 		return domain.Snapshot{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE productions SET revision=?,state=?,snapshot_json=?,updated_at=? WHERE id=? AND revision=?`, snapshot.Production.Revision, snapshot.Production.State, raw, snapshot.Production.UpdatedAt.Format(time.RFC3339Nano), id, current)
+	result, err := tx.ExecContext(context.WithoutCancel(ctx), `UPDATE productions SET revision=?,state=?,snapshot_json=?,updated_at=? WHERE id=? AND revision=?`, snapshot.Production.Revision, snapshot.Production.State, raw, snapshot.Production.UpdatedAt.Format(time.RFC3339Nano), id, current)
 	if err != nil {
 		return domain.Snapshot{}, err
 	}
@@ -181,10 +181,10 @@ func (s *Store) UpdateDetailed(ctx context.Context, id string, expected int64, i
 	if affected != 1 {
 		return domain.Snapshot{}, domain.Conflict("制作修订已变化，请刷新后重试", current)
 	}
-	if err = syncTables(ctx, tx, snapshot); err != nil {
+	if err = syncTables(context.WithoutCancel(ctx), tx, snapshot); err != nil {
 		return domain.Snapshot{}, err
 	}
-	if err = saveMetadata(ctx, tx, snapshot, idempotencyKey, actor, action, detail); err != nil {
+	if err = saveMetadata(context.WithoutCancel(ctx), tx, snapshot, idempotencyKey, actor, action, detail); err != nil {
 		return domain.Snapshot{}, err
 	}
 	if err = tx.Commit(); err != nil {
