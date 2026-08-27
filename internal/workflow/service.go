@@ -14,13 +14,14 @@ import (
 )
 
 type Service struct {
-	store    *store.Store
-	analyzer *analyzer.Analyzer
-	now      func() time.Time
+	store             *store.Store
+	analyzer          *analyzer.Analyzer
+	now               func() time.Time
+	verificationCache map[string]Verification
 }
 
 func New(s *store.Store, a *analyzer.Analyzer) *Service {
-	return &Service{store: s, analyzer: a, now: func() time.Time { return time.Now().UTC() }}
+	return &Service{store: s, analyzer: a, now: func() time.Time { return time.Now().UTC() }, verificationCache: make(map[string]Verification)}
 }
 
 type CreateProductionCommand struct {
@@ -540,7 +541,11 @@ func (s *Service) Release(ctx context.Context, id string, c ReleaseCommand) (dom
 }
 
 func (s *Service) Verify(ctx context.Context, code string) (Verification, error) {
-	snapshot, credential, err := s.store.FindCredential(ctx, strings.TrimSpace(code))
+	code = strings.TrimSpace(code)
+	if cached, exists := s.verificationCache[code]; exists {
+		return cached, nil
+	}
+	snapshot, credential, err := s.store.FindCredential(ctx, code)
 	if err != nil {
 		return Verification{Valid: false, Status: "not_found", Message: "未找到该校验码"}, err
 	}
@@ -569,7 +574,9 @@ func (s *Service) Verify(ctx context.Context, code string) (Verification, error)
 			message = "凭据无效或冻结内容不匹配"
 		}
 	}
-	return Verification{Valid: valid, ContentMatches: matches, Status: status, ProductionID: credential.ProductionID, PerformanceStartsAt: credential.ValidPerformanceStartsAt, Message: message}, nil
+	result := Verification{Valid: valid, ContentMatches: matches, Status: status, ProductionID: credential.ProductionID, PerformanceStartsAt: credential.ValidPerformanceStartsAt, Message: message}
+	s.verificationCache[code] = result
+	return result, nil
 }
 
 func incompleteReviewItems(snapshot *domain.Snapshot) []string {

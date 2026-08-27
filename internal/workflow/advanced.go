@@ -381,7 +381,7 @@ func reviewRevision(snapshot *domain.Snapshot, reviewID string) int64 {
 }
 
 func (s *Service) RevokeCredential(ctx context.Context, productionID, credentialID string, command RevokeCredentialCommand) (domain.Snapshot, error) {
-	return s.store.Update(ctx, productionID, command.ExpectedRevision, command.IdempotencyKey, command.ActorID, "release.revoke", func(snapshot *domain.Snapshot) error {
+	result, err := s.store.Update(ctx, productionID, command.ExpectedRevision, command.IdempotencyKey, command.ActorID, "release.revoke", func(snapshot *domain.Snapshot) error {
 		if snapshot.Production.State != domain.StateReleased {
 			return domain.StateConflict(snapshot.Production.State, "作废放行凭据")
 		}
@@ -402,10 +402,14 @@ func (s *Service) RevokeCredential(ctx context.Context, productionID, credential
 		snapshot.CredentialEvents = append(snapshot.CredentialEvents, domain.CredentialStatusEvent{ID: newID("credential-event"), CredentialID: credentialID, Status: "revoked", Reason: strings.TrimSpace(command.Reason), ActorID: command.ActorID, CreatedAt: s.now()})
 		return nil
 	})
+	if err == nil {
+		s.invalidateCredentialVerification(result, credentialID)
+	}
+	return result, err
 }
 
 func (s *Service) ReissueCredential(ctx context.Context, productionID, credentialID string, command ReissueCredentialCommand) (domain.Snapshot, error) {
-	return s.store.Update(ctx, productionID, command.ExpectedRevision, command.IdempotencyKey, command.ActorID, "release.reissue", func(snapshot *domain.Snapshot) error {
+	result, err := s.store.Update(ctx, productionID, command.ExpectedRevision, command.IdempotencyKey, command.ActorID, "release.reissue", func(snapshot *domain.Snapshot) error {
 		if snapshot.Production.State != domain.StateReleased {
 			return domain.StateConflict(snapshot.Production.State, "换发放行凭据")
 		}
@@ -455,6 +459,19 @@ func (s *Service) ReissueCredential(ctx context.Context, productionID, credentia
 		snapshot.Credentials = append(snapshot.Credentials, newCredential)
 		return nil
 	})
+	if err == nil {
+		s.invalidateCredentialVerification(result, credentialID)
+	}
+	return result, err
+}
+
+func (s *Service) invalidateCredentialVerification(snapshot domain.Snapshot, credentialID string) {
+	for _, credential := range snapshot.Credentials {
+		if credential.ID == credentialID {
+			delete(s.verificationCache, credential.VerificationCode)
+			return
+		}
+	}
 }
 
 func credentialByID(snapshot *domain.Snapshot, id string) (domain.ReleaseCredential, bool) {
