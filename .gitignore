@@ -1,0 +1,4 @@
+/stageclearance
+/*.db
+/*.db-shm
+/*.db-wal

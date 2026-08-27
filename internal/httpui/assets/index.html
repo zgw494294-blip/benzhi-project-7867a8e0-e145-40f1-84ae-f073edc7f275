@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>舞台吊挂演出放行台</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <header class="masthead">
+    <div><p class="eyebrow">STAGE / RIGGING / CLEARANCE</p><h1>舞台吊挂演出放行台</h1></div>
+    <div class="status"><span id="connectionDot"></span><span id="connectionText">本地工作台</span></div>
+  </header>
+  <main>
+    <aside class="rail">
+      <button class="primary" id="newProduction">＋ 新建制作档案</button>
+      <label class="search">制作列表<input id="search" placeholder="搜索制作或场地"></label>
+      <div id="productionList" class="production-list"></div>
+      <section class="verify-box"><h2>校验放行凭据</h2><form id="verifyForm"><input name="code" placeholder="16 位校验码" required><button>立即校验</button></form><div id="verifyResult"></div></section>
+    </aside>
+    <section class="workspace">
+      <div id="emptyState" class="empty"><div class="stage-mark">↕</div><h2>从一份可追溯的吊挂方案开始</h2><p>建立制作档案，登记吊挂元素与动作提示，再依次完成分析、排练、独立复核和放行。</p></div>
+      <div id="detail" hidden>
+        <div class="title-row"><div><p id="venue" class="eyebrow"></p><h2 id="title"></h2></div><div class="state-pill" id="state"></div></div>
+        <div class="stepper" id="stepper"></div>
+        <nav class="tabs" aria-label="制作工作区">
+          <button data-tab="overview" class="active">制作总览</button><button data-tab="rigging">吊挂图</button><button data-tab="cues">提示时间线</button><button data-tab="analysis">分析发现</button><button data-tab="evidence">排练证据</button><button data-tab="review">复核与放行</button>
+        </nav>
+        <div id="panel"></div>
+      </div>
+    </section>
+  </main>
+  <dialog id="modal"><form method="dialog" class="dialog-head"><h2 id="modalTitle"></h2><button value="cancel" aria-label="关闭">×</button></form><form id="modalForm" class="form-grid"></form></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>
