@@ -181,13 +181,21 @@ func (s *Store) UpdateDetailed(ctx context.Context, id string, expected int64, i
 	if affected != 1 {
 		return domain.Snapshot{}, domain.Conflict("制作修订已变化，请刷新后重试", current)
 	}
-	if err = syncTables(ctx, tx, snapshot); err != nil {
-		return domain.Snapshot{}, err
-	}
-	if err = saveMetadata(ctx, tx, snapshot, idempotencyKey, actor, action, detail); err != nil {
-		return domain.Snapshot{}, err
-	}
 	if err = tx.Commit(); err != nil {
+		return domain.Snapshot{}, err
+	}
+	metadataTx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Snapshot{}, err
+	}
+	defer metadataTx.Rollback()
+	if err = syncTables(ctx, metadataTx, snapshot); err != nil {
+		return domain.Snapshot{}, err
+	}
+	if err = saveMetadata(ctx, metadataTx, snapshot, idempotencyKey, actor, action, detail); err != nil {
+		return domain.Snapshot{}, err
+	}
+	if err = metadataTx.Commit(); err != nil {
 		return domain.Snapshot{}, err
 	}
 	return snapshot, nil
