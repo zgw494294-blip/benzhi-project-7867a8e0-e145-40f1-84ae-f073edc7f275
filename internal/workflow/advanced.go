@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -273,12 +274,29 @@ func (s *Service) ScheduleCues(ctx context.Context, productionID string, command
 }
 
 func (s *Service) AnalysisHistory(ctx context.Context, productionID string) ([]domain.AnalysisBatch, error) {
+	s.historyMu.RLock()
+	cached, ok := s.historyCache[productionID]
+	s.historyMu.RUnlock()
+	if ok {
+		var result []domain.AnalysisBatch
+		if err := json.Unmarshal(cached, &result); err != nil {
+			return nil, fmt.Errorf("解析分析历史缓存：%w", err)
+		}
+		return result, nil
+	}
 	snapshot, err := s.store.Get(ctx, productionID)
 	if err != nil {
 		return nil, err
 	}
 	result := append([]domain.AnalysisBatch(nil), snapshot.AnalysisBatches...)
 	sort.Slice(result, func(i, j int) bool { return result[i].AnalysisRevision < result[j].AnalysisRevision })
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("编码分析历史缓存：%w", err)
+	}
+	s.historyMu.Lock()
+	s.historyCache[productionID] = raw
+	s.historyMu.Unlock()
 	return result, nil
 }
 

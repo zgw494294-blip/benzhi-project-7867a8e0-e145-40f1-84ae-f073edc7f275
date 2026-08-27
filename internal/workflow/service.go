@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"stageclearance/internal/analyzer"
@@ -14,13 +15,15 @@ import (
 )
 
 type Service struct {
-	store    *store.Store
-	analyzer *analyzer.Analyzer
-	now      func() time.Time
+	store        *store.Store
+	analyzer     *analyzer.Analyzer
+	now          func() time.Time
+	historyMu    sync.RWMutex
+	historyCache map[string][]byte
 }
 
 func New(s *store.Store, a *analyzer.Analyzer) *Service {
-	return &Service{store: s, analyzer: a, now: func() time.Time { return time.Now().UTC() }}
+	return &Service{store: s, analyzer: a, now: func() time.Time { return time.Now().UTC() }, historyCache: make(map[string][]byte)}
 }
 
 type CreateProductionCommand struct {
