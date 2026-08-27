@@ -20,8 +20,11 @@ func (s *Store) Get(ctx context.Context, id string) (domain.Snapshot, error) {
 		return domain.Snapshot{}, err
 	}
 	var snapshot domain.Snapshot
-	err = json.Unmarshal(raw, &snapshot)
-	return snapshot, err
+	if err = json.Unmarshal(raw, &snapshot); err != nil {
+		return domain.Snapshot{}, err
+	}
+	s.restoreCredentialEvents(&snapshot)
+	return snapshot, nil
 }
 
 func (s *Store) List(ctx context.Context) ([]domain.Snapshot, error) {
@@ -40,6 +43,7 @@ func (s *Store) List(ctx context.Context) ([]domain.Snapshot, error) {
 		if err = json.Unmarshal(raw, &item); err != nil {
 			return nil, err
 		}
+		s.restoreCredentialEvents(&item)
 		out = append(out, item)
 	}
 	return out, rows.Err()

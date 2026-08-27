@@ -5,13 +5,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
 	"stageclearance/internal/domain"
 )
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db                *sql.DB
+	credentialEventMu sync.RWMutex
+	credentialEvents  map[string][]domain.CredentialStatusEvent
+}
 
 type AuditEvent struct {
 	ID           int64     `json:"id"`
@@ -29,7 +34,10 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	store := &Store{db: db}
+	store := &Store{
+		db:               db,
+		credentialEvents: make(map[string][]domain.CredentialStatusEvent),
+	}
 	if err = store.migrate(context.Background()); err != nil {
 		db.Close()
 		return nil, err
@@ -164,12 +172,15 @@ func (s *Store) UpdateDetailed(ctx context.Context, id string, expected int64, i
 	if err = json.Unmarshal(raw, &snapshot); err != nil {
 		return domain.Snapshot{}, err
 	}
+	s.restoreCredentialEvents(&snapshot)
 	if err = mutate(&snapshot); err != nil {
 		return domain.Snapshot{}, err
 	}
 	snapshot.Production.Revision = current + 1
 	snapshot.Production.UpdatedAt = time.Now().UTC()
-	raw, err = json.Marshal(snapshot)
+	persistent := snapshot
+	persistent.CredentialEvents = nil
+	raw, err = json.Marshal(persistent)
 	if err != nil {
 		return domain.Snapshot{}, err
 	}
@@ -187,10 +198,22 @@ func (s *Store) UpdateDetailed(ctx context.Context, id string, expected int64, i
 	if err = saveMetadata(ctx, tx, snapshot, idempotencyKey, actor, action, detail); err != nil {
 		return domain.Snapshot{}, err
 	}
+	events := append([]domain.CredentialStatusEvent(nil), snapshot.CredentialEvents...)
+	s.credentialEventMu.Lock()
 	if err = tx.Commit(); err != nil {
+		s.credentialEventMu.Unlock()
 		return domain.Snapshot{}, err
 	}
+	s.credentialEvents[snapshot.Production.ID] = events
+	s.credentialEventMu.Unlock()
 	return snapshot, nil
+}
+
+func (s *Store) restoreCredentialEvents(snapshot *domain.Snapshot) {
+	s.credentialEventMu.RLock()
+	events := append([]domain.CredentialStatusEvent(nil), s.credentialEvents[snapshot.Production.ID]...)
+	s.credentialEventMu.RUnlock()
+	snapshot.CredentialEvents = append(snapshot.CredentialEvents, events...)
 }
 
 func mapSQLError(err error) error {
