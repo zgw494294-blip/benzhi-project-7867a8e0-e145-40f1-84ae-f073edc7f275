@@ -25,6 +25,10 @@ func BuildManifest(snapshot Snapshot, frozenAt time.Time) (FrozenManifest, error
 		return snapshot.Cues[i].SequenceNo < snapshot.Cues[j].SequenceNo
 	})
 	sort.Slice(snapshot.Findings, func(i, j int) bool { return snapshot.Findings[i].ID < snapshot.Findings[j].ID })
+	for i := range snapshot.Findings {
+		sort.Strings(snapshot.Findings[i].ElementIDs)
+		sort.Strings(snapshot.Findings[i].CueIDs)
+	}
 	sort.Slice(snapshot.Evidence, func(i, j int) bool { return snapshot.Evidence[i].ID < snapshot.Evidence[j].ID })
 	snapshot.Production.UpdatedAt = time.Time{}
 	raw, err := json.Marshal(manifestMaterial{snapshot.Production, snapshot.Elements, snapshot.Cues, snapshot.Findings, snapshot.Evidence})
