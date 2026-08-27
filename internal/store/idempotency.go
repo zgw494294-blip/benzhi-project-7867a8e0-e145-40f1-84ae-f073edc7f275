@@ -10,6 +10,12 @@ import (
 	"stageclearance/internal/domain"
 )
 
+type cachedFailure struct {
+	Message string `json:"message"`
+}
+
+func (e *cachedFailure) Error() string { return e.Message }
+
 func loadIdempotent(ctx context.Context, tx *sql.Tx, id, key, action string) (domain.Snapshot, bool, error) {
 	var storedAction string
 	var raw []byte
@@ -35,7 +41,7 @@ func loadIdempotent(ctx context.Context, tx *sql.Tx, id, key, action string) (do
 	return snapshot, true, nil
 }
 
-func loadIdempotentFailure(ctx context.Context, tx *sql.Tx, id, key, action string) (*domain.Error, bool, error) {
+func loadIdempotentFailure(ctx context.Context, tx *sql.Tx, id, key, action string) (error, bool, error) {
 	var storedAction string
 	var raw []byte
 	err := tx.QueryRowContext(ctx, `SELECT action,error_json FROM idempotency_failures WHERE production_id=? AND key=?`, id, key).Scan(&storedAction, &raw)
@@ -48,7 +54,7 @@ func loadIdempotentFailure(ctx context.Context, tx *sql.Tx, id, key, action stri
 	if storedAction != action {
 		return nil, false, domain.Invalid("idempotencyKey", "该幂等键已用于其他操作")
 	}
-	var cached domain.Error
+	var cached cachedFailure
 	if err = json.Unmarshal(raw, &cached); err != nil {
 		return nil, false, err
 	}
@@ -56,7 +62,7 @@ func loadIdempotentFailure(ctx context.Context, tx *sql.Tx, id, key, action stri
 }
 
 func saveIdempotentFailure(ctx context.Context, tx *sql.Tx, scopeID, key, action string, failure *domain.Error) error {
-	raw, err := json.Marshal(failure)
+	raw, err := json.Marshal(cachedFailure{Message: failure.Message})
 	if err != nil {
 		return err
 	}
